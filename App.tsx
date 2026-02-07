@@ -1,22 +1,22 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import Header from './components/Header';
-import Hero from './components/Hero';
-import ArticleCard from './components/ArticleCard';
-import FeaturedSection from './components/FeaturedSection';
-import Newsletter from './components/Newsletter';
-import Footer from './components/Footer';
-import Destinations from './components/Destinations';
-import Guides from './components/Guides';
-import About from './components/About';
-import Contact from './components/Contact';
-import ArticleDetail from './components/ArticleDetail';
-import AdminPanel from './components/AdminPanel';
-import { INITIAL_ARTICLES, INITIAL_SITE_CONFIG } from './constants';
-import { Article, Category, SiteConfig } from './types';
+import Header from './components/Header.tsx';
+import Hero from './components/Hero.tsx';
+import ArticleCard from './components/ArticleCard.tsx';
+import FeaturedSection from './components/FeaturedSection.tsx';
+import Newsletter from './components/Newsletter.tsx';
+import Footer from './components/Footer.tsx';
+import Destinations from './components/Destinations.tsx';
+import Guides from './components/Guides.tsx';
+import About from './components/About.tsx';
+import Contact from './components/Contact.tsx';
+import ArticleDetail from './components/ArticleDetail.tsx';
+import AdminPanel from './components/AdminPanel.tsx';
+import { INITIAL_ARTICLES, INITIAL_SITE_CONFIG } from './constants.tsx';
+import { Article, Category, SiteConfig } from './types.ts';
 import { ChevronLeft, ChevronRight, ArrowRight, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
-import { dbService } from './db';
-import { firebaseService } from './firebase';
+import { dbService } from './db.ts';
+import { firebaseService } from './firebase.ts';
 
 interface Toast {
   id: number;
