@@ -1,0 +1,8 @@
+{
+  "name": "The Travel Guru",
+  "description": "A modern, high-end travel inspiration platform with sleek visuals and interactive elements.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
