@@ -9,6 +9,15 @@ interface HeroProps {
 }
 
 const Hero: React.FC<HeroProps> = ({ config, onNavigate }) => {
+  const handleStartExploring = () => {
+    const section = document.getElementById('articles-section');
+    if (section) {
+      section.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      onNavigate('destinations');
+    }
+  };
+
   return (
     <section className="relative h-[100vh] flex items-center justify-center text-center overflow-hidden">
       <div className="absolute inset-0 z-0">
@@ -36,14 +45,14 @@ const Hero: React.FC<HeroProps> = ({ config, onNavigate }) => {
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-6 w-full">
           <button 
-            onClick={() => onNavigate('destinations')}
-            className="bg-[#0d93f2] text-white px-[32px] py-[14px] rounded-full font-bold text-[18px] hover:scale-105 transition-all shadow-2xl shadow-blue-500/40"
+            onClick={handleStartExploring}
+            className="bg-[#0d93f2] text-white px-[32px] py-[14px] rounded-full font-bold text-[18px] hover:scale-105 active:scale-95 transition-all duration-300 shadow-2xl shadow-blue-500/40"
           >
             Start Exploring
           </button>
           <button 
             onClick={() => onNavigate('guides')}
-            className="bg-white/10 border-2 border-white/20 text-white px-[32px] py-[14px] rounded-full font-bold text-[18px] hover:bg-white/20 transition-all backdrop-blur-md"
+            className="bg-white/10 border-2 border-white/20 text-white px-[32px] py-[14px] rounded-full font-bold text-[18px] hover:scale-105 hover:bg-white/20 active:scale-95 transition-all duration-300 backdrop-blur-md"
           >
             Travel Guides
           </button>
@@ -51,7 +60,7 @@ const Hero: React.FC<HeroProps> = ({ config, onNavigate }) => {
       </div>
 
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 opacity-70">
-        <ChevronDown className="text-white size-10 animate-bounce" />
+        <ChevronDown className="text-white size-10 animate-bounce cursor-pointer" onClick={handleStartExploring} />
       </div>
     </section>
   );

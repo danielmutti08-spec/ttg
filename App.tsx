@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import ArticleCard from './components/ArticleCard';
@@ -13,7 +13,7 @@ import ArticleDetail from './components/ArticleDetail';
 import AdminPanel from './components/AdminPanel';
 import { INITIAL_ARTICLES, INITIAL_SITE_CONFIG } from './constants';
 import { Article, Category, SiteConfig } from './types';
-import { ChevronLeft, ChevronRight, ArrowRight, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowRight, CheckCircle2, AlertCircle, Loader2, X, Search as SearchIcon, Lock } from 'lucide-react';
 import { dbService } from './db';
 import { firebaseService } from './firebase';
 
@@ -24,16 +24,20 @@ interface Toast {
 }
 
 const App: React.FC = () => {
-  const [view, setView] = useState<'home' | 'destinations' | 'guides' | 'about' | 'contact' | 'article' | 'admin'>('home');
+  const [view, setView] = useState<'home' | 'destinations' | 'guides' | 'about' | 'contact' | 'article' | 'admin' | 'search' | 'login'>('home');
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(INITIAL_SITE_CONFIG);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
-  const [activeCategory, setActiveCategory] = useState<string>(Category.ALL);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(sessionStorage.getItem('isAdminLoggedIn') === 'true');
+  
+  // Login form state
+  const [loginUser, setLoginUser] = useState('');
+  const [loginPass, setLoginPass] = useState('');
+  const [loginError, setLoginError] = useState('');
 
   const addToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     const id = Date.now();
@@ -47,25 +51,19 @@ const App: React.FC = () => {
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // 1. Prova a caricare da Firebase
       const cloudArticles = await firebaseService.loadArticles();
       
       if (cloudArticles && cloudArticles.length > 0) {
         setArticles(cloudArticles);
-        console.log("☁️ Articoli caricati da Cloud Firestore");
       } else {
-        // 2. Se Cloud è vuoto, usa IndexedDB come fallback o dati Hard-coded
         const localArticles = await dbService.loadArticles();
         if (localArticles && localArticles.length > 0) {
           setArticles(localArticles);
-          console.log("📂 Articoli caricati da IndexedDB (Local Fallback)");
         } else {
           setArticles(INITIAL_ARTICLES);
-          console.log("💡 Caricati articoli predefiniti di sistema");
         }
       }
 
-      // Configurazione sito rimane locale o da IndexedDB per ora
       const savedConfig = await dbService.loadConfig();
       if (savedConfig) setSiteConfig(savedConfig);
 
@@ -84,16 +82,12 @@ const App: React.FC = () => {
 
   const handleAddArticle = async (art: Article) => {
     try {
-      // Salvataggio Cloud
       await firebaseService.saveArticle(art);
-      // Aggiornamento locale
       const newList = [art, ...articles];
       setArticles(newList);
-      // Backup locale IndexedDB
       await dbService.saveArticles(newList);
       addToast("✅ Articolo pubblicato su Cloud!");
     } catch (e) {
-      console.error("Errore salvataggio Cloud:", e);
       addToast("Errore durante la pubblicazione Cloud.", "error");
     }
   };
@@ -107,7 +101,6 @@ const App: React.FC = () => {
       if (selectedArticle?.id === uArt.id) setSelectedArticle(uArt);
       addToast("✅ Articolo aggiornato su Cloud!");
     } catch (e) {
-      console.error("Errore aggiornamento Cloud:", e);
       addToast("Errore aggiornamento Cloud.", "error");
     }
   };
@@ -153,6 +146,70 @@ const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    setView('search');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const correctPass = (import.meta as any).env?.VITE_ADMIN_PASSWORD || 'travelguru2024';
+    
+    if (loginUser === 'admin' && loginPass === correctPass) {
+      setIsLoggedIn(true);
+      sessionStorage.setItem('isAdminLoggedIn', 'true');
+      setLoginError('');
+      setView('admin');
+    } else {
+      setLoginError('Credenziali non valide');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    sessionStorage.removeItem('isAdminLoggedIn');
+    setView('home');
+  };
+
+  const searchResults = useMemo(() => {
+    if (!searchQuery) return [];
+    const q = searchQuery.toLowerCase();
+    return articles.filter(art => 
+      art.title.toLowerCase().includes(q) ||
+      (art.description?.toLowerCase().includes(q)) ||
+      (art.content?.toLowerCase().includes(q)) ||
+      art.category.toLowerCase().includes(q) ||
+      art.location.toLowerCase().includes(q)
+    );
+  }, [articles, searchQuery]);
+
+  const highlightText = (text: string, query: string) => {
+    if (!query) return text;
+    const parts = text.split(new RegExp(`(${query})`, 'gi'));
+    return parts.map((part, i) => 
+      part.toLowerCase() === query.toLowerCase() 
+        ? <mark key={i} className="bg-blue-100 text-blue-600 rounded-sm px-0.5">{part}</mark> 
+        : part
+    );
+  };
+
+  // Determine if the current view should have a transparent header sitting on an image hero
+  const isTransparentLayout = view === 'home' || view === 'article';
+
+  // Redirect to login if trying to access admin without session
+  useEffect(() => {
+    if (view === 'admin' && !isLoggedIn) {
+      setView('login');
+    }
+  }, [view, isLoggedIn]);
+
+  const handleNavigate = (v: 'home' | 'destinations' | 'guides' | 'about' | 'contact' | 'admin') => {
+    setView(v);
+    setSelectedArticle(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   if (isLoading) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-white gap-6">
@@ -175,15 +232,18 @@ const App: React.FC = () => {
         ))}
       </div>
 
-      <Header 
-        onNavigate={(v) => { setView(v); setSelectedArticle(null); }} 
-        onLoginClick={() => isLoggedIn ? setView('admin') : setShowLoginModal(true)}
-      />
+      {view !== 'admin' && view !== 'login' && (
+        <Header 
+          onNavigate={handleNavigate} 
+          onSearch={handleSearch}
+          isTransparentLayout={isTransparentLayout}
+        />
+      )}
       
       {view === 'home' && (
         <main>
           <Hero config={siteConfig} onNavigate={setView} />
-          <section className="max-w-7xl mx-auto py-24 px-6 md:px-12">
+          <section id="articles-section" className="max-w-7xl mx-auto py-24 px-6 md:px-12">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16">
               <div>
                 <h2 className="text-5xl font-extrabold text-gray-900 mb-3 tracking-tighter">Recent Discoveries</h2>
@@ -213,30 +273,127 @@ const App: React.FC = () => {
       {view === 'article' && selectedArticle && (
         <ArticleDetail article={selectedArticle} articles={articles} onBack={() => setView('home')} onSelectArticle={handleArticleClick} />
       )}
-      {view === 'admin' && (
+      
+      {view === 'login' && (
+        <div className="h-screen w-full flex items-center justify-center bg-[#f8f9fa] px-6">
+          <div className="max-w-md w-full bg-white rounded-[2.5rem] p-12 shadow-2xl border border-gray-100">
+            <div className="flex justify-center mb-8">
+              <div className="size-16 bg-[#0084ff] rounded-2xl flex items-center justify-center text-white shadow-xl shadow-blue-500/20">
+                <Lock className="size-8" />
+              </div>
+            </div>
+            <h2 className="text-3xl font-black text-gray-900 text-center mb-2">Team Access</h2>
+            <p className="text-gray-400 text-center text-sm font-medium mb-10 tracking-tight">Enter your credentials to manage the vault.</p>
+            
+            <form onSubmit={handleLoginSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">Username</label>
+                <input 
+                  type="text" 
+                  value={loginUser}
+                  onChange={(e) => setLoginUser(e.target.value)}
+                  placeholder="Username" 
+                  className="w-full px-6 py-4 rounded-xl bg-gray-50 border border-transparent focus:bg-white focus:border-blue-100 outline-none transition-all font-bold" 
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">Password</label>
+                <input 
+                  type="password" 
+                  value={loginPass}
+                  onChange={(e) => setLoginPass(e.target.value)}
+                  placeholder="Password" 
+                  className="w-full px-6 py-4 rounded-xl bg-gray-50 border border-transparent focus:bg-white focus:border-blue-100 outline-none transition-all font-bold" 
+                />
+              </div>
+              
+              {loginError && (
+                <div className="flex items-center gap-2 text-red-500 font-bold text-xs ml-4 py-2">
+                  <AlertCircle size={14} />
+                  {loginError}
+                </div>
+              )}
+
+              <button className="w-full bg-[#0d93f2] text-white py-5 rounded-2xl font-black uppercase tracking-[0.2em] text-xs hover:bg-blue-600 transition-all shadow-xl shadow-blue-500/20 active:scale-95 mt-4">
+                Login
+              </button>
+              
+              <button 
+                type="button"
+                onClick={() => setView('home')} 
+                className="w-full text-gray-400 font-bold text-xs uppercase tracking-widest mt-6 hover:text-black transition-colors"
+              >
+                Return Home
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {view === 'admin' && isLoggedIn && (
         <AdminPanel 
           articles={articles} siteConfig={siteConfig} 
           onUpdateSiteConfig={handleUpdateSiteConfig} onAdd={handleAddArticle} 
           onUpdateArticle={handleUpdateArticle} onDelete={handleDeleteArticle} 
           onInitializeCloudDB={handleInitializeCloudDB}
-          onLogout={() => { setIsLoggedIn(false); setView('home'); }} onClose={() => setView('home')} 
+          onLogout={handleLogout} 
+          onClose={() => setView('home')} 
         />
       )}
 
-      {showLoginModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-6 bg-[#0a1128]/95 backdrop-blur-xl">
-          <div className="bg-white rounded-[2.5rem] p-12 max-w-md w-full shadow-2xl">
-            <h3 className="text-2xl font-extrabold text-gray-900 mb-8 text-center">Elite Access</h3>
-            <form onSubmit={(e) => { e.preventDefault(); setIsLoggedIn(true); setShowLoginModal(false); setView('admin'); }} className="space-y-4">
-              <input type="text" placeholder="Username" className="w-full px-6 py-4 rounded-xl bg-gray-50 outline-none" />
-              <input type="password" placeholder="Password" className="w-full px-6 py-4 rounded-xl bg-gray-50 outline-none" />
-              <button className="w-full bg-[#1a1a1a] text-white py-4 rounded-xl font-bold">Unlock Vault</button>
-              <button type="button" onClick={() => setShowLoginModal(false)} className="w-full text-gray-400 font-bold text-sm mt-4">Cancel</button>
-            </form>
+      {view === 'search' && (
+        <div className="bg-[#fcfcfc] min-h-screen pt-32 pb-24 px-6 md:px-12">
+          <div className="max-w-6xl mx-auto mb-16 flex flex-col md:flex-row md:items-center justify-between gap-8">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-[0.5em] text-[#0084ff] mb-4 block">Search Intelligence</span>
+              <h1 className="text-5xl md:text-7xl font-bold text-gray-900 tracking-tightest">Results for <span className="text-[#0d93f2] italic font-serif">"{searchQuery}"</span></h1>
+              <p className="text-gray-400 font-medium mt-4">{searchResults.length} {searchResults.length === 1 ? 'article' : 'articles'} found in the vault.</p>
+            </div>
+            <button 
+              onClick={() => setView('home')}
+              className="flex items-center gap-2 text-gray-400 hover:text-black font-bold text-xs uppercase tracking-widest transition-colors"
+            >
+              <X className="w-4 h-4" /> Close Search
+            </button>
           </div>
+
+          {searchResults.length > 0 ? (
+            <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+              {searchResults.map((article) => (
+                <div key={article.id} onClick={() => handleArticleClick(article)} className="group cursor-pointer">
+                  <div className="aspect-[4/5] rounded-[2.5rem] overflow-hidden shadow-sm relative mb-6">
+                    <img src={article.cardImageUrl || article.imageUrl} alt={article.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-[1500ms]" />
+                  </div>
+                  <div className="bg-white rounded-[2rem] p-8 shadow-sm group-hover:shadow-xl transition-all duration-500 border border-gray-50">
+                    <div className="text-[10px] font-black text-[#0084ff] uppercase tracking-widest mb-3">{highlightText(article.location, searchQuery)}</div>
+                    <h3 className="text-2xl font-black text-gray-900 mb-4">{highlightText(article.title, searchQuery)}</h3>
+                    <p className="text-gray-400 text-sm font-medium line-clamp-2">{highlightText(article.description || '', searchQuery)}</p>
+                    <div className="mt-6 flex items-center gap-2 text-[#0084ff] font-bold text-xs uppercase tracking-widest">
+                      Read more <ArrowRight className="w-4 h-4" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="max-w-2xl mx-auto text-center py-20">
+              <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-8 text-gray-300">
+                <SearchIcon className="w-8 h-8" />
+              </div>
+              <h3 className="text-3xl font-black text-gray-900 mb-4">Empty Vault.</h3>
+              <p className="text-gray-400 font-medium leading-relaxed">We couldn't find any articles matching your search terms. Try exploring different keywords or browsing our destinations.</p>
+              <button 
+                onClick={() => setView('destinations')}
+                className="mt-10 px-8 py-4 bg-[#0d93f2] text-white rounded-full font-bold text-xs uppercase tracking-widest hover:scale-105 transition-all shadow-xl shadow-blue-500/20"
+              >
+                Browse All Destinations
+              </button>
+            </div>
+          )}
         </div>
       )}
-      <Footer />
+
+      {view !== 'admin' && view !== 'login' && <Footer onTeamClick={() => setView('login')} onNavigate={handleNavigate} />}
     </div>
   );
 };

@@ -1,8 +1,12 @@
-
 import React from 'react';
 import { Globe, Share2, Info } from 'lucide-react';
 
-const Footer: React.FC = () => {
+interface FooterProps {
+  onTeamClick?: () => void;
+  onNavigate?: (view: 'home' | 'destinations' | 'guides' | 'about' | 'contact' | 'admin') => void;
+}
+
+const Footer: React.FC<FooterProps> = ({ onTeamClick, onNavigate }) => {
   return (
     <footer className="bg-[#fcfcfc] border-t border-gray-100 pt-20 pb-10 px-6 md:px-12">
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-20">
@@ -28,20 +32,28 @@ const Footer: React.FC = () => {
         <div>
           <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-900 mb-8">Explore</h4>
           <ul className="space-y-4 text-gray-400 text-xs font-medium">
-            <li><a href="#" className="hover:text-[#0084ff]">Destinations</a></li>
-            <li><a href="#" className="hover:text-[#0084ff]">Best Hotels</a></li>
-            <li><a href="#" className="hover:text-[#0084ff]">Travel Gear</a></li>
-            <li><a href="#" className="hover:text-[#0084ff]">Photography Tips</a></li>
+            <li>
+              <button onClick={() => onNavigate?.('destinations')} className="hover:text-[#0084ff] text-left">Destinations</button>
+            </li>
+            <li>
+              <button onClick={() => onNavigate?.('guides')} className="hover:text-[#0084ff] text-left">Guides</button>
+            </li>
+            <li>
+              <button onClick={() => onNavigate?.('about')} className="hover:text-[#0084ff] text-left">About</button>
+            </li>
+            <li>
+              <button onClick={() => onNavigate?.('contact')} className="hover:text-[#0084ff] text-left">Contact</button>
+            </li>
           </ul>
         </div>
 
         <div>
           <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-900 mb-8">About</h4>
           <ul className="space-y-4 text-gray-400 text-xs font-medium">
-            <li><a href="#" className="hover:text-[#0084ff]">Our Story</a></li>
-            <li><a href="#" className="hover:text-[#0084ff]">The Team</a></li>
-            <li><a href="#" className="hover:text-[#0084ff]">Careers</a></li>
-            <li><a href="#" className="hover:text-[#0084ff]">Press Kit</a></li>
+            <li><button onClick={() => onNavigate?.('about')} className="hover:text-[#0084ff] text-left">Our Story</button></li>
+            <li>
+              <button onClick={onTeamClick} className="hover:text-[#0084ff] text-left">Editorial</button>
+            </li>
           </ul>
         </div>
 
@@ -51,7 +63,7 @@ const Footer: React.FC = () => {
             <li><a href="#" className="hover:text-[#0084ff]">Help Center</a></li>
             <li><a href="#" className="hover:text-[#0084ff]">Privacy Policy</a></li>
             <li><a href="#" className="hover:text-[#0084ff]">Terms of Service</a></li>
-            <li><a href="#" className="hover:text-[#0084ff]">Contact Us</a></li>
+            <li><button onClick={() => onNavigate?.('contact')} className="hover:text-[#0084ff] text-left">Contact Us</button></li>
           </ul>
         </div>
       </div>

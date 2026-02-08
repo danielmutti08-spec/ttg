@@ -42,7 +42,7 @@ const About: React.FC = () => {
           </div>
         </div>
 
-        <div className="mb-32">
+        <div className="mb-12">
           <h2 className="text-4xl font-black tracking-tighter mb-16 text-center">Core Pillars</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
             {[
@@ -56,26 +56,6 @@ const About: React.FC = () => {
                 </div>
                 <h3 className="text-2xl font-black mb-4">{pillar.title}</h3>
                 <p className="text-gray-400 font-medium leading-relaxed">{pillar.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <h2 className="text-4xl font-black tracking-tighter mb-16">The Architects</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {[
-              { name: 'Elena Rossi', role: 'Editor in Chief', img: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=400' },
-              { name: 'Marcus Thorne', role: 'Lead Photographer', img: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=400' },
-              { name: 'Sofia Chen', role: 'Cultural Advisor', img: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=400' },
-              { name: 'Julian Vance', role: 'Field Researcher', img: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=400' }
-            ].map((member, i) => (
-              <div key={i} className="group">
-                <div className="aspect-[3/4] rounded-2xl overflow-hidden mb-6">
-                  <img src={member.img} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700 group-hover:scale-110" />
-                </div>
-                <h4 className="text-xl font-black mb-1">{member.name}</h4>
-                <p className="text-[10px] font-black uppercase tracking-widest text-[#0d93f2]">{member.role}</p>
               </div>
             ))}
           </div>

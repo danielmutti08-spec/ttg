@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { ArrowLeft, Share2, Heart, Bookmark, Calendar, CreditCard, Coffee, Download, Sparkles, Quote as QuoteIcon } from 'lucide-react';
+import { Share2, Heart, Bookmark, Calendar, CreditCard, Coffee, Sparkles, Quote as QuoteIcon } from 'lucide-react';
 import { Article } from '../types.ts';
 import ArticleCard from './ArticleCard.tsx';
 
@@ -97,16 +97,6 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, articles, onBack
 
   return (
     <div className="bg-[#fcfdfe] min-h-screen">
-      {/* Back Button Overlay */}
-      <div className="fixed top-0 left-0 right-0 z-40 px-6 md:px-12 py-8 pointer-events-none">
-        <button 
-          onClick={onBack}
-          className="pointer-events-auto bg-white/20 backdrop-blur-md border border-white/20 p-4 rounded-full text-white hover:bg-white/40 transition-all group"
-        >
-          <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-        </button>
-      </div>
-
       {/* Hero Section: Centered and Scaled Down */}
       <section className="relative h-[70vh] flex items-center justify-center text-center overflow-hidden">
         <div className="absolute inset-0 z-0">
@@ -171,9 +161,11 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, articles, onBack
 
         {/* Info Sidebar (GURU INTEL) */}
         <aside className="w-full lg:w-96 shrink-0">
-          <div className="bg-white border border-gray-100 rounded-[3rem] p-10 shadow-2xl shadow-slate-200/50 sticky top-32">
+          <div className="bg-white border border-gray-100 rounded-[3rem] p-10 shadow-2xl shadow-slate-200/50 relative">
             <h3 className="flex items-center gap-3 text-sm font-bold uppercase tracking-[0.2em] mb-12 text-slate-900">
-              <Sparkles className="w-5 h-5 text-[#0d93f2]" />
+              <span className="w-5 h-5 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-[#0d93f2]" />
+              </span>
               Guru Intel
             </h3>
 

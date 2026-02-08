@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, FileText, Image as ImageIcon, LogOut, Edit3, Trash2, Upload, CheckCircle2, Plus, Save, Monitor, AlertCircle, RefreshCw, CloudCheck, Clock, Database } from 'lucide-react';
+import { X, FileText, Image as ImageIcon, LogOut, Edit3, Trash2, Upload, CheckCircle2, Plus, Save, Monitor, AlertCircle, RefreshCw, CloudCheck, Clock, Database, Box } from 'lucide-react';
 import Cropper from 'https://esm.sh/react-easy-crop@5.2.0';
 import { Article, Category, SiteConfig } from '../types.ts';
+import LogoGenerator from './LogoGenerator.tsx';
 
 const getCroppedImg = async (imageSrc: string, pixelCrop: any, rotation = 0): Promise<string> => {
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -58,7 +59,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   onLogout, 
   onClose 
 }) => {
-  const [activeTab, setActiveTab] = useState<'articles' | 'config'>('articles');
+  const [activeTab, setActiveTab] = useState<'articles' | 'config' | 'assets'>('articles');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<string>('Mai');
   const [syncStatus, setSyncStatus] = useState<'synced' | 'saving' | 'dirty'>('synced');
@@ -205,6 +206,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         <nav className="flex-1 space-y-2">
           <button onClick={() => { setActiveTab('articles'); resetForm(); }} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl font-bold text-sm transition-all ${activeTab === 'articles' ? 'bg-white text-[#0d93f2] shadow-sm' : 'text-slate-400 hover:bg-slate-100'}`}><FileText size={18} /> Cloud Editorial</button>
           <button onClick={() => setActiveTab('config')} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl font-bold text-sm transition-all ${activeTab === 'config' ? 'bg-white text-[#0d93f2] shadow-sm' : 'text-slate-400 hover:bg-slate-100'}`}><Monitor size={18} /> Identità Sito</button>
+          <button onClick={() => setActiveTab('assets')} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl font-bold text-sm transition-all ${activeTab === 'assets' ? 'bg-white text-[#0d93f2] shadow-sm' : 'text-slate-400 hover:bg-slate-100'}`}><Box size={18} /> Brand Assets</button>
           
           {onInitializeCloudDB && (
             <div className="pt-8 mt-auto">
@@ -224,9 +226,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       {/* CONTENT */}
       <div className="flex-1 overflow-y-auto p-12 bg-white">
         <div className="flex justify-between items-center mb-12">
-          <h2 className="text-4xl font-black">{activeTab === 'articles' ? 'Gestione Storie' : 'Design Homepage'}</h2>
+          <h2 className="text-4xl font-black">
+            {activeTab === 'articles' ? 'Gestione Storie' : (activeTab === 'config' ? 'Design Homepage' : 'Assets & Branding')}
+          </h2>
           <div className="flex gap-4">
-            {syncStatus === 'dirty' && (
+            {syncStatus === 'dirty' && activeTab !== 'assets' && (
               <button onClick={handleManualSave} className="flex items-center gap-3 px-8 py-3.5 bg-[#0d93f2] text-white rounded-xl font-bold text-xs shadow-xl shadow-blue-500/20 hover:scale-105 transition-all">
                 <Save size={14} /> Pubblica su Cloud
               </button>
@@ -355,6 +359,32 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             </section>
             <input type="file" ref={siteHeroFileInputRef} onChange={async e => { const f = e.target.files?.[0]; if(f) handleFileAction(f, 'siteHero'); }} className="hidden" accept="image/*" />
           </form>
+        )}
+
+        {activeTab === 'assets' && (
+          <div className="max-w-4xl space-y-12">
+            <section className="bg-slate-50/50 p-10 rounded-[2.5rem] border border-slate-100">
+               <div className="mb-10">
+                 <h3 className="text-xl font-black mb-2">Visual Identity Toolkit</h3>
+                 <p className="text-gray-400 text-sm font-medium">Generate high-resolution transparent PNGs of the brand logo.</p>
+               </div>
+
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <LogoGenerator type="full" filename="travel-guru-logo-full.png" />
+                 <LogoGenerator type="icon" filename="travel-guru-icon.png" />
+                 <LogoGenerator type="white" filename="travel-guru-logo-white.png" />
+                 <LogoGenerator type="dark" filename="travel-guru-logo-dark.png" />
+               </div>
+
+               <div className="mt-12 p-8 bg-blue-50/50 rounded-3xl border border-blue-100 flex items-start gap-4">
+                 <AlertCircle className="text-[#0d93f2] shrink-0" size={20} />
+                 <div>
+                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-1">Brand Guidelines</h4>
+                    <p className="text-xs text-slate-500 leading-relaxed font-medium">Use the blue logo on light backgrounds, the white logo on dark images, and the icon as a social profile picture or favicon. All assets are exported with a high-resolution 72dpi to 300dpi equivalent density depending on usage.</p>
+                 </div>
+               </div>
+            </section>
+          </div>
         )}
       </div>
     </div>
