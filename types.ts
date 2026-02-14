@@ -11,6 +11,7 @@ export interface ContentBlock {
 
 export interface Article {
   id: string;
+  slug: string; // URL identifier
   title: string;
   location: string;
   category: string;

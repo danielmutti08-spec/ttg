@@ -19,6 +19,7 @@ export const INITIAL_SITE_CONFIG: SiteConfig = {
 export const INITIAL_ARTICLES: Article[] = [
   {
     id: 'cinque-terre-cloud',
+    slug: 'cinque-perle-colorate-liguria',
     title: 'Le Cinque Terre: Un Viaggio tra Borghi Sospesi tra Cielo e Mare',
     location: 'LIGURIA, ITALY',
     category: Category.ADVENTURE,
@@ -55,6 +56,7 @@ Il periodo migliore va da **aprile a giugno** e **settembre-ottobre**, evitando 
   },
   {
     id: 'amalfi-cloud',
+    slug: 'hidden-gems-amalfi',
     title: 'Hidden Gems of the Amalfi Coast',
     location: 'CAMPANIA, ITALY',
     category: Category.EUROPE,
