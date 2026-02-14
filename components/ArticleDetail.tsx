@@ -86,48 +86,13 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, articles, onBack
   };
 
   const processInline = (text: string) => {
-    // Process both **bold** and *italic* inline formatting
-    const parts: (string | JSX.Element)[] = [];
-    let currentIndex = 0;
-    
-    // Combined regex to match both **bold** and *italic*
-    const inlineRegex = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
-    let match;
-    
-    while ((match = inlineRegex.exec(text)) !== null) {
-      // Add text before the match
-      if (match.index > currentIndex) {
-        parts.push(text.substring(currentIndex, match.index));
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={i} className="font-bold text-slate-900">{part.slice(2, -2)}</strong>;
       }
-      
-      const matchedText = match[0];
-      
-      // Check if it's bold (**text**)
-      if (matchedText.startsWith('**') && matchedText.endsWith('**')) {
-        parts.push(
-          <strong key={match.index} className="font-bold text-slate-900">
-            {matchedText.slice(2, -2)}
-          </strong>
-        );
-      }
-      // Check if it's italic (*text*)
-      else if (matchedText.startsWith('*') && matchedText.endsWith('*')) {
-        parts.push(
-          <em key={match.index} className="italic">
-            {matchedText.slice(1, -1)}
-          </em>
-        );
-      }
-      
-      currentIndex = match.index + matchedText.length;
-    }
-    
-    // Add remaining text after last match
-    if (currentIndex < text.length) {
-      parts.push(text.substring(currentIndex));
-    }
-    
-    return parts.length > 0 ? parts : text;
+      return part;
+    });
   };
 
   return (
