@@ -19,6 +19,25 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, articles, onBack
     .filter(a => a.id !== article.id)
     .slice(0, 3);
 
+  // Extract first italic paragraph if it exists
+  const extractIntroAndContent = (text: string) => {
+    if (!text) return { intro: null, remainingContent: text };
+    
+    const blocks = text.split(/\n\n+/);
+    const firstBlock = blocks[0]?.trim();
+    
+    // Check if entire first block is wrapped in single asterisks (italic)
+    if (firstBlock && firstBlock.startsWith('*') && firstBlock.endsWith('*') && !firstBlock.startsWith('**')) {
+      // Extract the italic text without asterisks
+      const introText = firstBlock.slice(1, -1);
+      // Remaining content is everything after the first block
+      const remainingContent = blocks.slice(1).join('\n\n');
+      return { intro: introText, remainingContent };
+    }
+    
+    return { intro: null, remainingContent: text };
+  };
+
   // Improved Markdown parser
   const renderMarkdown = (text: string) => {
     if (!text) return null;
@@ -175,10 +194,30 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, articles, onBack
               </p>
             )}
 
-            {/* Markdown Body Content */}
-            <div className="article-body">
-              {renderMarkdown(article.content || "")}
-            </div>
+            {/* If no description field, extract intro from content */}
+            {!article.description && (() => {
+              const { intro, remainingContent } = extractIntroAndContent(article.content || "");
+              return (
+                <>
+                  {intro && (
+                    <p className="text-3xl leading-relaxed text-slate-900 font-serif italic mb-16 border-b border-slate-100 pb-16 first-letter:text-[4.5rem] first-letter:font-black first-letter:text-[#0d93f2] first-letter:float-left first-letter:mr-4 first-letter:mt-1 first-letter:leading-[0.8] first-letter:font-serif first-letter:not-italic">
+                      {intro}
+                    </p>
+                  )}
+                  {/* Markdown Body Content */}
+                  <div className="article-body">
+                    {renderMarkdown(remainingContent)}
+                  </div>
+                </>
+              );
+            })()}
+
+            {/* If description exists, render all content normally */}
+            {article.description && (
+              <div className="article-body">
+                {renderMarkdown(article.content || "")}
+              </div>
+            )}
           </article>
 
           {/* Related Stories */}
