@@ -171,7 +171,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, articles, onBack
             {/* Intro Paragraph: Italic with Azure Drop Cap */}
             {article.description && (
               <p className="text-3xl leading-relaxed text-slate-900 font-serif italic mb-16 border-b border-slate-100 pb-16 first-letter:text-[4.5rem] first-letter:font-black first-letter:text-[#0d93f2] first-letter:float-left first-letter:mr-4 first-letter:mt-1 first-letter:leading-[0.8] first-letter:font-serif first-letter:not-italic">
-                {article.description}
+                {processInline(article.description)}
               </p>
             )}
 
