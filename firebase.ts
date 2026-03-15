@@ -5,6 +5,7 @@ import {
   collection, 
   getDocs, 
   setDoc, 
+  getDoc,
   doc, 
   deleteDoc, 
   query, 
@@ -117,6 +118,53 @@ export const firebaseService = {
       await setDoc(docRef, payload);
     } catch (error) {
       console.error("Error saving article to Firestore:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Verifies admin login credentials against Firestore.
+   */
+  async verifyAdminLogin(username: string, password: string): Promise<boolean> {
+    if (!this.isReady() || !db) {
+      // Fallback for local development if Firebase is not configured
+      console.warn("Firebase not configured. Using fallback login.");
+      return username === 'admin' && password === 'admin';
+    }
+
+    try {
+      const settingsRef = doc(db, 'settings', 'admin');
+      const settingsDoc = await getDoc(settingsRef);
+      
+      if (!settingsDoc.exists()) {
+        console.error('Admin settings not found in Firestore');
+        return false;
+      }
+      
+      const data = settingsDoc.data();
+      return data.username === username && data.password === password;
+    } catch (error) {
+      console.error('Login verification error:', error);
+      return false;
+    }
+  },
+
+  /**
+   * Sets the admin password in Firestore. Use this once to initialize.
+   */
+  async setAdminPassword(password: string): Promise<void> {
+    if (!this.isReady() || !db) return;
+
+    try {
+      const settingsRef = doc(db, 'settings', 'admin');
+      await setDoc(settingsRef, {
+        username: 'admin',
+        password: password,
+        createdAt: serverTimestamp()
+      });
+      console.log('✅ Admin password set successfully in Firestore.');
+    } catch (error) {
+      console.error('Error setting admin password:', error);
       throw error;
     }
   },

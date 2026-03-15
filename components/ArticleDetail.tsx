@@ -19,56 +19,19 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, articles, onBack
     .filter(a => a.id !== article.id)
     .slice(0, 3);
 
-  // Extract first italic paragraph OR first paragraph as description
-  const extractIntroAndContent = (text: string) => {
-    if (!text) return { intro: null, remainingContent: text };
-    
-    const blocks = text.split(/\n\n+/);
-    
-    // Skip H1 title if present at the start
-    let startIndex = 0;
-    if (blocks[0]?.trim().startsWith('# ')) {
-      startIndex = 1;
-    }
-    
-    const firstBlock = blocks[startIndex]?.trim();
-    
-    if (!firstBlock) return { intro: null, remainingContent: blocks.slice(startIndex).join('\n\n') };
-
-    // Check if entire first block is wrapped in single asterisks (italic)
-    if (firstBlock.startsWith('*') && firstBlock.endsWith('*') && !firstBlock.startsWith('**')) {
-      const introText = firstBlock.slice(1, -1);
-      const remainingContent = blocks.slice(startIndex + 1).join('\n\n');
-      return { intro: introText, remainingContent };
-    }
-    
-    // If first paragraph is not italic but is a regular paragraph (not a heading),
-    // use it as intro anyway
-    if (!firstBlock.startsWith('#') && !firstBlock.startsWith('> ') && !firstBlock.startsWith('!')) {
-      const introText = firstBlock.replace(/\*\*/g, '').replace(/\*/g, '');
-      const remainingContent = blocks.slice(startIndex + 1).join('\n\n');
-      return { intro: introText, remainingContent };
-    }
-    
-    return { intro: null, remainingContent: blocks.slice(startIndex).join('\n\n') };
-  };
-
   // Improved Markdown parser
   const renderMarkdown = (text: string) => {
     if (!text) return null;
 
+    // Split by double newlines or single newline for block identification
     const blocks = text.split(/\n\n+/);
 
     return blocks.map((block, index) => {
       const trimmedBlock = block.trim();
       if (!trimmedBlock) return null;
 
-      // 0. Skip H1 titles (# Title) - already shown in hero
-      if (trimmedBlock.startsWith('# ')) {
-        return null;
-      }
-
       // 1. Handle Images: ![alt](url)
+      // Enhanced regex to handle complex URLs from Google and other sources
       const imageMatch = trimmedBlock.match(/!\[(.*?)\]\((.*?)\)/);
       if (imageMatch) {
         const alt = imageMatch[1];
@@ -101,16 +64,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, articles, onBack
         );
       }
 
-      // 3. Handle H3: ### Heading
-      if (trimmedBlock.startsWith('### ')) {
-        return (
-          <h3 key={index} className="text-[1.4rem] font-bold text-slate-800 mt-10 mb-4 leading-tight">
-            {processInline(trimmedBlock.replace('### ', ''))}
-          </h3>
-        );
-      }
-
-      // 4. Handle Blockquotes: > Quote
+      // 3. Handle Blockquotes: > Quote
       if (trimmedBlock.startsWith('> ')) {
         return (
           <blockquote key={index} className="my-16 bg-blue-50/40 rounded-[2rem] p-10 md:p-14 text-center relative overflow-hidden">
@@ -122,23 +76,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, articles, onBack
         );
       }
 
-      // 5. Handle bullet lists
-      if (trimmedBlock.includes('\n- ') || trimmedBlock.startsWith('- ')) {
-        const items = trimmedBlock.split('\n').filter(line => line.trim().startsWith('- '));
-        if (items.length > 0) {
-          return (
-            <ul key={index} className="list-disc list-outside ml-6 mb-8 space-y-2">
-              {items.map((item, i) => (
-                <li key={i} className="text-lg md:text-xl leading-[1.7] text-slate-600">
-                  {processInline(item.replace(/^-\s+/, ''))}
-                </li>
-              ))}
-            </ul>
-          );
-        }
-      }
-
-      // 6. Default Paragraph
+      // 4. Default Paragraph
       return (
         <p key={index} className="text-lg md:text-xl leading-[1.7] text-slate-600 mb-8 whitespace-pre-wrap">
           {processInline(trimmedBlock)}
@@ -148,51 +86,18 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, articles, onBack
   };
 
   const processInline = (text: string) => {
-    const parts: (string | JSX.Element)[] = [];
-    let currentIndex = 0;
-    
-    const inlineRegex = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
-    let match;
-    
-    while ((match = inlineRegex.exec(text)) !== null) {
-      if (match.index > currentIndex) {
-        parts.push(text.substring(currentIndex, match.index));
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={i} className="font-bold text-slate-900">{part.slice(2, -2)}</strong>;
       }
-      
-      const matchedText = match[0];
-      
-      if (matchedText.startsWith('**') && matchedText.endsWith('**')) {
-        parts.push(
-          <strong key={match.index} className="font-bold text-slate-900">
-            {matchedText.slice(2, -2)}
-          </strong>
-        );
-      } else if (matchedText.startsWith('*') && matchedText.endsWith('*')) {
-        parts.push(
-          <em key={match.index} className="italic">
-            {matchedText.slice(1, -1)}
-          </em>
-        );
-      }
-      
-      currentIndex = match.index + matchedText.length;
-    }
-    
-    if (currentIndex < text.length) {
-      parts.push(text.substring(currentIndex));
-    }
-    
-    return parts.length > 0 ? parts : text;
+      return part;
+    });
   };
-
-  // Determine intro and content
-  const { intro: extractedIntro, remainingContent } = extractIntroAndContent(article.content || "");
-  const introText = article.description || extractedIntro;
-  const bodyContent = article.description ? article.content : remainingContent;
 
   return (
     <div className="bg-[#fcfdfe] min-h-screen">
-      {/* Hero Section */}
+      {/* Hero Section: Centered and Scaled Down */}
       <section className="relative h-[70vh] flex items-center justify-center text-center overflow-hidden">
         <div className="absolute inset-0 z-0">
           <img src={article.heroImageUrl || article.imageUrl} alt={article.title} className="w-full h-full object-cover" />
@@ -229,15 +134,15 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, articles, onBack
         <div className="flex-1 w-full max-w-[800px] mx-auto lg:mx-0">
           <article>
             {/* Intro Paragraph: Italic with Azure Drop Cap */}
-            {introText && (
+            {article.description && (
               <p className="text-3xl leading-relaxed text-slate-900 font-serif italic mb-16 border-b border-slate-100 pb-16 first-letter:text-[4.5rem] first-letter:font-black first-letter:text-[#0d93f2] first-letter:float-left first-letter:mr-4 first-letter:mt-1 first-letter:leading-[0.8] first-letter:font-serif first-letter:not-italic">
-                {introText}
+                {article.description}
               </p>
             )}
 
             {/* Markdown Body Content */}
             <div className="article-body">
-              {renderMarkdown(bodyContent || "")}
+              {renderMarkdown(article.content || "")}
             </div>
           </article>
 
@@ -281,7 +186,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, articles, onBack
                 </div>
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Budget</p>
-                  <p className="font-serif italic text-lg text-slate-900">{article.intel?.budget || 'Flexible'}</p>
+                  <p className="font-serif italic text-lg text-slate-900">{article.intel?.budget || 'High'}</p>
                 </div>
               </div>
 
@@ -291,7 +196,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, articles, onBack
                 </div>
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">Must Try</p>
-                  <p className="font-serif italic text-lg text-slate-900">{article.intel?.mustTry || 'Local Experiences'}</p>
+                  <p className="font-serif italic text-lg text-slate-900">{article.intel?.mustTry || 'Ask a Local'}</p>
                 </div>
               </div>
             </div>

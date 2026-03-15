@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Routes, Route, useNavigate, useLocation, Navigate, useParams } from 'react-router-dom';
 import Header from './components/Header.tsx';
 import Hero from './components/Hero.tsx';
 import ArticleCard from './components/ArticleCard.tsx';
@@ -16,6 +17,15 @@ import { Article, Category, SiteConfig } from './types.ts';
 import { ChevronLeft, ChevronRight, ArrowRight, CheckCircle2, AlertCircle, Loader2, X, Search as SearchIcon, Lock } from 'lucide-react';
 import { dbService } from './db.ts';
 import { firebaseService } from './firebase.ts';
+import { 
+  sanitizeInput, 
+  generateCSRFToken, 
+  validateCSRFToken, 
+  updateLastActivity, 
+  isSessionExpired, 
+  checkRateLimit, 
+  logSecurityEvent 
+} from './src/utils/security.ts';
 
 interface Toast {
   id: number;
@@ -24,7 +34,9 @@ interface Toast {
 }
 
 const App: React.FC = () => {
-  const [view, setView] = useState<'home' | 'destinations' | 'guides' | 'about' | 'contact' | 'article' | 'admin' | 'search' | 'login'>('home');
+  const navigate = useNavigate();
+  const location = useLocation();
+  
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(INITIAL_SITE_CONFIG);
@@ -32,7 +44,8 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(sessionStorage.getItem('isAdminLoggedIn') === 'true');
+  const [isLoggedIn, setIsLoggedIn] = useState(sessionStorage.getItem('admin_logged_in') === 'true');
+  const [csrfToken, setCsrfToken] = useState<string>('');
   
   // Login form state
   const [loginUser, setLoginUser] = useState('');
@@ -78,7 +91,37 @@ const App: React.FC = () => {
 
   useEffect(() => {
     loadData();
+    // Generate CSRF token on mount
+    const token = generateCSRFToken();
+    setCsrfToken(token);
+    sessionStorage.setItem('csrf_token', token);
   }, [loadData]);
+
+  // Session timeout check
+  useEffect(() => {
+    if (isLoggedIn) {
+      const interval = setInterval(() => {
+        if (isSessionExpired()) {
+          handleLogout();
+          addToast("Sessione scaduta per inattività.", "info");
+        }
+      }, 60000); // Check every minute
+      return () => clearInterval(interval);
+    }
+  }, [isLoggedIn]);
+
+  // Update activity on user interaction
+  useEffect(() => {
+    const handleActivity = () => {
+      if (isLoggedIn) updateLastActivity();
+    };
+    window.addEventListener('mousedown', handleActivity);
+    window.addEventListener('keydown', handleActivity);
+    return () => {
+      window.removeEventListener('mousedown', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
+    };
+  }, [isLoggedIn]);
 
   const handleAddArticle = async (art: Article) => {
     try {
@@ -142,34 +185,67 @@ const App: React.FC = () => {
 
   const handleArticleClick = (art: Article) => {
     setSelectedArticle(art);
-    setView('article');
+    navigate(`/articles/${art.slug || art.id}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSearch = (query: string) => {
-    setSearchQuery(query);
-    setView('search');
+    const sanitizedQuery = sanitizeInput(query, 100);
+    setSearchQuery(sanitizedQuery);
+    navigate('/search');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const correctPass = (import.meta as any).env?.VITE_ADMIN_PASSWORD || 'travelguru2024';
     
-    if (loginUser === 'admin' && loginPass === correctPass) {
-      setIsLoggedIn(true);
-      sessionStorage.setItem('isAdminLoggedIn', 'true');
-      setLoginError('');
-      setView('admin');
-    } else {
-      setLoginError('Credenziali non valide');
+    // 1. Rate Limiting
+    if (!checkRateLimit(loginUser, 5, 60000)) {
+      setLoginError('Troppi tentativi. Riprova tra un minuto.');
+      logSecurityEvent('RATE_LIMIT_EXCEEDED', { user: loginUser });
+      return;
+    }
+
+    // 2. CSRF Validation
+    const storedToken = sessionStorage.getItem('csrf_token');
+    if (!validateCSRFToken(csrfToken, storedToken)) {
+      setLoginError('Errore di sicurezza (CSRF). Ricarica la pagina.');
+      logSecurityEvent('CSRF_ATTEMPT', { user: loginUser });
+      return;
+    }
+
+    // 3. Sanitize inputs
+    const cleanUser = sanitizeInput(loginUser, 50);
+    const cleanPass = sanitizeInput(loginPass, 50);
+
+    try {
+      // 4. Verify credentials against Firestore
+      const isValid = await firebaseService.verifyAdminLogin(cleanUser, cleanPass);
+
+      if (isValid) {
+        setIsLoggedIn(true);
+        sessionStorage.setItem('admin_logged_in', 'true');
+        updateLastActivity();
+        setLoginError('');
+        navigate('/admin/dashboard');
+        addToast("Accesso autorizzato.");
+      } else {
+        setLoginError('Credenziali non valide');
+        logSecurityEvent('LOGIN_FAILURE', { user: cleanUser });
+      }
+    } catch (error) {
+      setLoginError('Errore durante il login');
+      console.error(error);
     }
   };
 
   const handleLogout = () => {
     setIsLoggedIn(false);
-    sessionStorage.removeItem('isAdminLoggedIn');
-    setView('home');
+    sessionStorage.removeItem('admin_logged_in');
+    sessionStorage.removeItem('csrf_token');
+    localStorage.removeItem('last_activity');
+    navigate('/');
+    addToast("Sessione terminata.");
   };
 
   const searchResults = useMemo(() => {
@@ -195,17 +271,11 @@ const App: React.FC = () => {
   };
 
   // Determine if the current view should have a transparent header sitting on an image hero
-  const isTransparentLayout = view === 'home' || view === 'article';
-
-  // Redirect to login if trying to access admin without session
-  useEffect(() => {
-    if (view === 'admin' && !isLoggedIn) {
-      setView('login');
-    }
-  }, [view, isLoggedIn]);
+  const isTransparentLayout = location.pathname === '/' || location.pathname.startsWith('/articles/');
 
   const handleNavigate = (v: 'home' | 'destinations' | 'guides' | 'about' | 'contact' | 'admin') => {
-    setView(v);
+    const path = v === 'home' ? '/' : (v === 'admin' ? '/admin/dashboard' : `/${v}`);
+    navigate(path);
     setSelectedArticle(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -232,7 +302,7 @@ const App: React.FC = () => {
         ))}
       </div>
 
-      {view !== 'admin' && view !== 'login' && (
+      {location.pathname !== '/admin/dashboard' && location.pathname !== '/admin/login' && (
         <Header 
           onNavigate={handleNavigate} 
           onSearch={handleSearch}
@@ -240,161 +310,202 @@ const App: React.FC = () => {
         />
       )}
       
-      {view === 'home' && (
-        <main>
-          <Hero config={siteConfig} onNavigate={setView} />
-          <section id="articles-section" className="max-w-7xl mx-auto py-24 px-6 md:px-12">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16">
-              <div>
-                <h2 className="text-5xl font-extrabold text-gray-900 mb-3 tracking-tighter">Recent Discoveries</h2>
-                <p className="text-gray-400 text-lg font-medium">Cloud-synced insights from world explorers.</p>
-              </div>
-              <button onClick={() => setView('destinations')} className="text-[#0084ff] font-bold text-sm flex items-center gap-2 hover:underline decoration-2 underline-offset-4">
-                View all stories <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-              {articles.slice(0, 3).map((article) => (
-                <div key={article.id} onClick={() => handleArticleClick(article)}>
-                  <ArticleCard article={article} />
+      <Routes>
+        <Route path="/" element={
+          <main>
+            <Hero config={siteConfig} onNavigate={(v) => navigate(v === 'home' ? '/' : `/${v}`)} />
+            <section id="articles-section" className="max-w-7xl mx-auto py-24 px-6 md:px-12">
+              <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-16">
+                <div>
+                  <h2 className="text-5xl font-extrabold text-gray-900 mb-3 tracking-tighter">Recent Discoveries</h2>
+                  <p className="text-gray-400 text-lg font-medium">Cloud-synced insights from world explorers.</p>
                 </div>
-              ))}
-            </div>
-          </section>
-          <FeaturedSection onNavigate={setView} />
-          <Newsletter />
-        </main>
-      )}
-
-      {view === 'destinations' && <Destinations articles={articles} onSelectArticle={handleArticleClick} />}
-      {view === 'guides' && <Guides articles={articles} onSelectArticle={handleArticleClick} />}
-      {view === 'about' && <About />}
-      {view === 'contact' && <Contact />}
-      {view === 'article' && selectedArticle && (
-        <ArticleDetail article={selectedArticle} articles={articles} onBack={() => setView('home')} onSelectArticle={handleArticleClick} />
-      )}
-      
-      {view === 'login' && (
-        <div className="h-screen w-full flex items-center justify-center bg-[#f8f9fa] px-6">
-          <div className="max-w-md w-full bg-white rounded-[2.5rem] p-12 shadow-2xl border border-gray-100">
-            <div className="flex justify-center mb-8">
-              <div className="size-16 bg-[#0084ff] rounded-2xl flex items-center justify-center text-white shadow-xl shadow-blue-500/20">
-                <Lock className="size-8" />
+                <button onClick={() => navigate('/destinations')} className="text-[#0084ff] font-bold text-sm flex items-center gap-2 hover:underline decoration-2 underline-offset-4">
+                  View all stories <ArrowRight className="w-4 h-4" />
+                </button>
               </div>
-            </div>
-            <h2 className="text-3xl font-black text-gray-900 text-center mb-2">Team Access</h2>
-            <p className="text-gray-400 text-center text-sm font-medium mb-10 tracking-tight">Enter your credentials to manage the vault.</p>
-            
-            <form onSubmit={handleLoginSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">Username</label>
-                <input 
-                  type="text" 
-                  value={loginUser}
-                  onChange={(e) => setLoginUser(e.target.value)}
-                  placeholder="Username" 
-                  className="w-full px-6 py-4 rounded-xl bg-gray-50 border border-transparent focus:bg-white focus:border-blue-100 outline-none transition-all font-bold" 
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">Password</label>
-                <input 
-                  type="password" 
-                  value={loginPass}
-                  onChange={(e) => setLoginPass(e.target.value)}
-                  placeholder="Password" 
-                  className="w-full px-6 py-4 rounded-xl bg-gray-50 border border-transparent focus:bg-white focus:border-blue-100 outline-none transition-all font-bold" 
-                />
-              </div>
-              
-              {loginError && (
-                <div className="flex items-center gap-2 text-red-500 font-bold text-xs ml-4 py-2">
-                  <AlertCircle size={14} />
-                  {loginError}
-                </div>
-              )}
-
-              <button className="w-full bg-[#0d93f2] text-white py-5 rounded-2xl font-black uppercase tracking-[0.2em] text-xs hover:bg-blue-600 transition-all shadow-xl shadow-blue-500/20 active:scale-95 mt-4">
-                Login
-              </button>
-              
-              <button 
-                type="button"
-                onClick={() => setView('home')} 
-                className="w-full text-gray-400 font-bold text-xs uppercase tracking-widest mt-6 hover:text-black transition-colors"
-              >
-                Return Home
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {view === 'admin' && isLoggedIn && (
-        <AdminPanel 
-          articles={articles} siteConfig={siteConfig} 
-          onUpdateSiteConfig={handleUpdateSiteConfig} onAdd={handleAddArticle} 
-          onUpdateArticle={handleUpdateArticle} onDelete={handleDeleteArticle} 
-          onInitializeCloudDB={handleInitializeCloudDB}
-          onLogout={handleLogout} 
-          onClose={() => setView('home')} 
-        />
-      )}
-
-      {view === 'search' && (
-        <div className="bg-[#fcfcfc] min-h-screen pt-32 pb-24 px-6 md:px-12">
-          <div className="max-w-6xl mx-auto mb-16 flex flex-col md:flex-row md:items-center justify-between gap-8">
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-[0.5em] text-[#0084ff] mb-4 block">Search Intelligence</span>
-              <h1 className="text-5xl md:text-7xl font-bold text-gray-900 tracking-tightest">Results for <span className="text-[#0d93f2] italic font-serif">"{searchQuery}"</span></h1>
-              <p className="text-gray-400 font-medium mt-4">{searchResults.length} {searchResults.length === 1 ? 'article' : 'articles'} found in the vault.</p>
-            </div>
-            <button 
-              onClick={() => setView('home')}
-              className="flex items-center gap-2 text-gray-400 hover:text-black font-bold text-xs uppercase tracking-widest transition-colors"
-            >
-              <X className="w-4 h-4" /> Close Search
-            </button>
-          </div>
-
-          {searchResults.length > 0 ? (
-            <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-              {searchResults.map((article) => (
-                <div key={article.id} onClick={() => handleArticleClick(article)} className="group cursor-pointer">
-                  <div className="aspect-[4/5] rounded-[2.5rem] overflow-hidden shadow-sm relative mb-6">
-                    <img src={article.cardImageUrl || article.imageUrl} alt={article.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-[1500ms]" />
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+                {articles.slice(0, 3).map((article) => (
+                  <div key={article.id} onClick={() => handleArticleClick(article)}>
+                    <ArticleCard article={article} />
                   </div>
-                  <div className="bg-white rounded-[2rem] p-8 shadow-sm group-hover:shadow-xl transition-all duration-500 border border-gray-50">
-                    <div className="text-[10px] font-black text-[#0084ff] uppercase tracking-widest mb-3">{highlightText(article.location, searchQuery)}</div>
-                    <h3 className="text-2xl font-black text-gray-900 mb-4">{highlightText(article.title, searchQuery)}</h3>
-                    <p className="text-gray-400 text-sm font-medium line-clamp-2">{highlightText(article.description || '', searchQuery)}</p>
-                    <div className="mt-6 flex items-center gap-2 text-[#0084ff] font-bold text-xs uppercase tracking-widest">
-                      Read more <ArrowRight className="w-4 h-4" />
+                ))}
+              </div>
+            </section>
+            <FeaturedSection onNavigate={(v) => navigate(v === 'home' ? '/' : `/${v}`)} />
+            <Newsletter />
+          </main>
+        } />
+
+        <Route path="/destinations" element={<Destinations articles={articles} onSelectArticle={handleArticleClick} />} />
+        <Route path="/guides" element={<Guides articles={articles} onSelectArticle={handleArticleClick} />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/contact" element={<Contact />} />
+        
+        <Route path="/articles/:slug" element={
+          <ArticleDetailWrapper 
+            articles={articles} 
+            onSelectArticle={handleArticleClick} 
+            onBack={() => navigate('/')} 
+          />
+        } />
+        
+        <Route path="/admin/login" element={
+          isLoggedIn ? <Navigate to="/admin/dashboard" /> : (
+            <div className="h-screen w-full flex items-center justify-center bg-[#f8f9fa] px-6">
+              <div className="max-w-md w-full bg-white rounded-[2.5rem] p-12 shadow-2xl border border-gray-100">
+                <div className="flex justify-center mb-8">
+                  <div className="size-16 bg-[#0084ff] rounded-2xl flex items-center justify-center text-white shadow-xl shadow-blue-500/20">
+                    <Lock className="size-8" />
+                  </div>
+                </div>
+                <h2 className="text-3xl font-black text-gray-900 text-center mb-2">Team Access</h2>
+                <p className="text-gray-400 text-center text-sm font-medium mb-10 tracking-tight">Enter your credentials to manage the vault.</p>
+                
+                <form onSubmit={handleLoginSubmit} className="space-y-4">
+                  <input type="hidden" name="csrf_token" value={csrfToken} />
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">Username</label>
+                    <input 
+                      type="text" 
+                      value={loginUser}
+                      onChange={(e) => setLoginUser(e.target.value)}
+                      placeholder="Username" 
+                      className="w-full px-6 py-4 rounded-xl bg-gray-50 border border-transparent focus:bg-white focus:border-blue-100 outline-none transition-all font-bold" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">Password</label>
+                    <input 
+                      type="password" 
+                      value={loginPass}
+                      onChange={(e) => setLoginPass(e.target.value)}
+                      placeholder="Password" 
+                      className="w-full px-6 py-4 rounded-xl bg-gray-50 border border-transparent focus:bg-white focus:border-blue-100 outline-none transition-all font-bold" 
+                    />
+                  </div>
+                  
+                  {loginError && (
+                    <div className="flex items-center gap-2 text-red-500 font-bold text-xs ml-4 py-2">
+                      <AlertCircle size={14} />
+                      {loginError}
+                    </div>
+                  )}
+
+                  <button className="w-full bg-[#0d93f2] text-white py-5 rounded-2xl font-black uppercase tracking-[0.2em] text-xs hover:bg-blue-600 transition-all shadow-xl shadow-blue-500/20 active:scale-95 mt-4">
+                    Login
+                  </button>
+                  
+                  <button 
+                    type="button"
+                    onClick={() => navigate('/')} 
+                    className="w-full text-gray-400 font-bold text-xs uppercase tracking-widest mt-6 hover:text-black transition-colors"
+                  >
+                    Return Home
+                  </button>
+                </form>
+              </div>
+            </div>
+          )
+        } />
+
+        <Route path="/admin/dashboard" element={
+          isLoggedIn ? (
+            <AdminPanel 
+              articles={articles} siteConfig={siteConfig} 
+              onUpdateSiteConfig={handleUpdateSiteConfig} onAdd={handleAddArticle} 
+              onUpdateArticle={handleUpdateArticle} onDelete={handleDeleteArticle} 
+              onInitializeCloudDB={handleInitializeCloudDB}
+              onLogout={handleLogout} 
+              onClose={() => navigate('/')} 
+            />
+          ) : <Navigate to="/admin/login" />
+        } />
+
+        <Route path="/search" element={
+          <div className="bg-[#fcfcfc] min-h-screen pt-32 pb-24 px-6 md:px-12">
+            <div className="max-w-6xl mx-auto mb-16 flex flex-col md:flex-row md:items-center justify-between gap-8">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-[0.5em] text-[#0084ff] mb-4 block">Search Intelligence</span>
+                <h1 className="text-5xl md:text-7xl font-bold text-gray-900 tracking-tightest">Results for <span className="text-[#0d93f2] italic font-serif">"{searchQuery}"</span></h1>
+                <p className="text-gray-400 font-medium mt-4">{searchResults.length} {searchResults.length === 1 ? 'article' : 'articles'} found in the vault.</p>
+              </div>
+              <button 
+                onClick={() => navigate('/')}
+                className="flex items-center gap-2 text-gray-400 hover:text-black font-bold text-xs uppercase tracking-widest transition-colors"
+              >
+                <X className="w-4 h-4" /> Close Search
+              </button>
+            </div>
+
+            {searchResults.length > 0 ? (
+              <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+                {searchResults.map((article) => (
+                  <div key={article.id} onClick={() => handleArticleClick(article)} className="group cursor-pointer">
+                    <div className="aspect-[4/5] rounded-[2.5rem] overflow-hidden shadow-sm relative mb-6">
+                      <img src={article.cardImageUrl || article.imageUrl} alt={article.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-[1500ms]" />
+                    </div>
+                    <div className="bg-white rounded-[2rem] p-8 shadow-sm group-hover:shadow-xl transition-all duration-500 border border-gray-50">
+                      <div className="text-[10px] font-black text-[#0084ff] uppercase tracking-widest mb-3">{highlightText(article.location, searchQuery)}</div>
+                      <h3 className="text-2xl font-black text-gray-900 mb-4">{highlightText(article.title, searchQuery)}</h3>
+                      <p className="text-gray-400 text-sm font-medium line-clamp-2">{highlightText(article.description || '', searchQuery)}</p>
+                      <div className="mt-6 flex items-center gap-2 text-[#0084ff] font-bold text-xs uppercase tracking-widest">
+                        Read more <ArrowRight className="w-4 h-4" />
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="max-w-2xl mx-auto text-center py-20">
-              <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-8 text-gray-300">
-                <SearchIcon className="w-8 h-8" />
+                ))}
               </div>
-              <h3 className="text-3xl font-black text-gray-900 mb-4">Empty Vault.</h3>
-              <p className="text-gray-400 font-medium leading-relaxed">We couldn't find any articles matching your search terms. Try exploring different keywords or browsing our destinations.</p>
-              <button 
-                onClick={() => setView('destinations')}
-                className="mt-10 px-8 py-4 bg-[#0d93f2] text-white rounded-full font-bold text-xs uppercase tracking-widest hover:scale-105 transition-all shadow-xl shadow-blue-500/20"
-              >
-                Browse All Destinations
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+            ) : (
+              <div className="max-w-2xl mx-auto text-center py-20">
+                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-8 text-gray-300">
+                  <SearchIcon className="w-8 h-8" />
+                </div>
+                <h3 className="text-3xl font-black text-gray-900 mb-4">Empty Vault.</h3>
+                <p className="text-gray-400 font-medium leading-relaxed">We couldn't find any articles matching your search terms. Try exploring different keywords or browsing our destinations.</p>
+                <button 
+                  onClick={() => navigate('/destinations')}
+                  className="mt-10 px-8 py-4 bg-[#0d93f2] text-white rounded-full font-bold text-xs uppercase tracking-widest hover:scale-105 transition-all shadow-xl shadow-blue-500/20"
+                >
+                  Browse All Destinations
+                </button>
+              </div>
+            )}
+          </div>
+        } />
+      </Routes>
 
-      {view !== 'admin' && view !== 'login' && <Footer onTeamClick={() => setView('login')} onNavigate={handleNavigate} />}
+      {location.pathname !== '/admin/dashboard' && location.pathname !== '/admin/login' && <Footer onTeamClick={() => navigate('/admin/login')} onNavigate={handleNavigate} />}
     </div>
+  );
+};
+
+// Wrapper component to handle article lookup by slug or ID
+const ArticleDetailWrapper: React.FC<{ 
+  articles: Article[], 
+  onSelectArticle: (a: Article) => void,
+  onBack: () => void
+}> = ({ articles, onSelectArticle, onBack }) => {
+  const { slug } = useParams();
+  const article = articles.find(a => a.slug === slug || a.id === slug);
+
+  if (!article) {
+    return (
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-white gap-6">
+        <AlertCircle className="size-12 text-red-500" />
+        <h2 className="text-2xl font-bold">Article not found</h2>
+        <button onClick={onBack} className="text-[#0d93f2] font-bold">Return Home</button>
+      </div>
+    );
+  }
+
+  return (
+    <ArticleDetail 
+      article={article} 
+      articles={articles} 
+      onBack={onBack} 
+      onSelectArticle={onSelectArticle} 
+    />
   );
 };
 

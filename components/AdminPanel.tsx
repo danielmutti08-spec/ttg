@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, FileText, Image as ImageIcon, LogOut, Edit3, Trash2, Upload, CheckCircle2, Plus, Save, Monitor, AlertCircle, RefreshCw, CloudCheck, Clock, Database, Box } from 'lucide-react';
-import Cropper from 'https://esm.sh/react-easy-crop@5.2.0';
+import { X, FileText, Image as ImageIcon, LogOut, Edit3, Trash2, Upload, CheckCircle2, Plus, Save, Monitor, AlertCircle, RefreshCw, Cloud, Clock, Database, Box } from 'lucide-react';
+import Cropper from 'react-easy-crop';
 import { Article, Category, SiteConfig } from '../types.ts';
 import LogoGenerator from './LogoGenerator.tsx';
+import { sanitizeInput, sanitizeHTML, validateCSRFToken, logSecurityEvent } from '../src/utils/security.ts';
+import { createSlug } from '../src/utils/seo.ts';
 
 const getCroppedImg = async (imageSrc: string, pixelCrop: any, rotation = 0): Promise<string> => {
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -84,14 +86,49 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const [formArticle, setFormArticle] = useState<Partial<Article>>(initialFormState);
+  const [autoSlug, setAutoSlug] = useState(true);
+
+  // Auto-generate slug from title
+  useEffect(() => {
+    if (autoSlug && formArticle.title && !editingId) {
+      setFormArticle(prev => ({ ...prev, slug: createSlug(formArticle.title || '') }));
+    }
+  }, [formArticle.title, autoSlug, editingId]);
+
+  const [showInitConfirm, setShowInitConfirm] = useState(false);
 
   const handleManualSave = useCallback(() => {
     if (!formArticle.title) return;
+
+    // CSRF Validation
+    const storedToken = sessionStorage.getItem('csrf_token');
+    const currentToken = sessionStorage.getItem('csrf_token'); // In this case we use the same session token
+    if (!validateCSRFToken(currentToken, storedToken)) {
+      logSecurityEvent('ADMIN_CSRF_FAILURE', { action: 'save_article' });
+      return;
+    }
+
     setSyncStatus('saving');
-    const submission = { ...formArticle, id: editingId || `art-${Date.now()}` } as Article;
+    
+    // Sanitize inputs before saving
+    const sanitizedArticle = {
+      ...formArticle,
+      id: editingId || `art-${Date.now()}`,
+      title: sanitizeInput(formArticle.title || '', 100),
+      slug: sanitizeInput(formArticle.slug || createSlug(formArticle.title || ''), 100),
+      location: sanitizeInput(formArticle.location || '', 100),
+      description: sanitizeInput(formArticle.description || '', 500),
+      content: sanitizeHTML(formArticle.content || ''),
+      intel: {
+        bestTime: sanitizeInput(formArticle.intel?.bestTime || '', 50),
+        budget: sanitizeInput(formArticle.intel?.budget || '', 50),
+        mustTry: sanitizeInput(formArticle.intel?.mustTry || '', 100),
+        vibe: sanitizeInput(formArticle.intel?.vibe || '', 50),
+      }
+    } as Article;
     
     try {
-      if (editingId) onUpdateArticle(submission); else onAdd(submission);
+      if (editingId) onUpdateArticle(sanitizedArticle); else onAdd(sanitizedArticle);
       
       const now = new Date();
       setLastSaved(`${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`);
@@ -210,12 +247,32 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
           
           {onInitializeCloudDB && (
             <div className="pt-8 mt-auto">
-              <button 
-                onClick={() => { if(confirm("Vuoi popolare il Cloud con gli articoli di base?")) onInitializeCloudDB(); }} 
-                className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl font-bold text-sm text-slate-400 hover:bg-blue-50 hover:text-blue-500 transition-all border border-dashed border-slate-200"
-              >
-                <Database size={18} /> Inizializza Cloud
-              </button>
+              {!showInitConfirm ? (
+                <button 
+                  onClick={() => setShowInitConfirm(true)} 
+                  className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl font-bold text-sm text-slate-400 hover:bg-blue-50 hover:text-blue-500 transition-all border border-dashed border-slate-200"
+                >
+                  <Database size={18} /> Inizializza Cloud
+                </button>
+              ) : (
+                <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100 animate-in fade-in zoom-in duration-300">
+                  <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-3 text-center">Sei sicuro?</p>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setShowInitConfirm(false)}
+                      className="flex-1 py-2 bg-white text-slate-400 rounded-xl font-bold text-[10px] uppercase tracking-widest border border-slate-100"
+                    >
+                      No
+                    </button>
+                    <button 
+                      onClick={() => { onInitializeCloudDB(); setShowInitConfirm(false); }}
+                      className="flex-1 py-2 bg-blue-500 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest shadow-lg shadow-blue-500/20"
+                    >
+                      Sì, Vai!
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </nav>
@@ -251,6 +308,36 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-4">Località</label>
                     <input type="text" placeholder="Es: KYOTO, JAPAN" value={formArticle.location} onChange={e => onInputChange('location', e.target.value)} className="w-full px-6 py-4 rounded-2xl border-transparent bg-white shadow-sm focus:border-blue-200 outline-none" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-6">
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center ml-4">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">SEO Slug</label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={autoSlug} 
+                          onChange={e => setAutoSlug(e.target.checked)}
+                          className="size-3 accent-[#0d93f2]"
+                        />
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Auto-genera</span>
+                      </label>
+                    </div>
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        placeholder="slug-articolo-seo" 
+                        value={formArticle.slug} 
+                        onChange={e => onInputChange('slug', e.target.value)} 
+                        disabled={autoSlug}
+                        className={`w-full px-6 py-4 rounded-2xl border-transparent bg-white shadow-sm focus:border-blue-200 outline-none font-mono text-sm ${autoSlug ? 'text-slate-400' : 'text-slate-900'}`} 
+                      />
+                      <div className="absolute right-6 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-300 uppercase tracking-widest">
+                        /articles/{formArticle.slug || '...'}
+                      </div>
+                    </div>
                   </div>
                 </div>
                 
