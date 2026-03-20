@@ -26,6 +26,11 @@ const ArticleCard: React.FC<ArticleCardProps> = ({ article }) => {
         <h3 className="text-[#1a1a1a] font-extrabold text-xl leading-snug group-hover:text-[#0d93f2] transition-colors">
           {article.title}
         </h3>
+        {article.description && (
+          <p className="text-slate-400 text-[11px] font-medium mt-3 line-clamp-2 italic">
+            {article.description}
+          </p>
+        )}
       </div>
     </div>
   );

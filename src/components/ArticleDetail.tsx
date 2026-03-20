@@ -1,7 +1,19 @@
 import React, { useEffect } from 'react';
-import { Share2, Heart, Bookmark, Calendar, CreditCard, Coffee, Sparkles, Quote as QuoteIcon } from 'lucide-react';
+import { Share2, Heart, Bookmark, Calendar, CreditCard, Coffee, Sparkles, MapPin } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { Article } from '../types.ts';
 import ArticleCard from './ArticleCard.tsx';
+
+// Function to remove the first H1 from content (duplicate title)
+function removeFirstH1(content: string): string {
+  if (!content) return '';
+  
+  // Removes first <h1>...</h1> or # Title (Markdown)
+  return content
+    .replace(/^#\s+.+$/m, '') // Removes # Title (Markdown)
+    .replace(/<h1[^>]*>.*?<\/h1>/i, '') // Removes <h1>Title</h1> (HTML)
+    .trim();
+}
 
 interface ArticleDetailProps {
   article: Article;
@@ -19,80 +31,35 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, articles, onBack
     .filter(a => a.id !== article.id)
     .slice(0, 3);
 
-  // Improved Markdown parser
-  const renderMarkdown = (text: string) => {
-    if (!text) return null;
+  const formatContent = (html: string) => {
+    if (!html) return "";
+    
+    // Check if it's already well-formatted HTML (multiple paragraphs)
+    const pCount = (html.match(/<p>/g) || []).length;
+    if (pCount > 1) return html;
 
-    // Split by double newlines or single newline for block identification
-    const blocks = text.split(/\n\n+/);
+    // If it's a single <p> or plain text with newlines
+    let text = html;
+    if (html.startsWith('<p>') && html.endsWith('</p>') && pCount === 1) {
+      text = html.replace(/^<p>/, '').replace(/<\/p>$/, '');
+    }
 
-    return blocks.map((block, index) => {
-      const trimmedBlock = block.trim();
-      if (!trimmedBlock) return null;
+    // Split by double newlines and wrap in <p>
+    let formatted = text
+      .split(/\n\n+/)
+      .map(para => {
+        const trimmed = para.trim();
+        if (!trimmed) return "";
+        
+        // Simple markdown heading support
+        if (trimmed.startsWith('## ')) return `<h2 class="text-[1.8rem] font-bold text-slate-900 mt-16 mb-8 leading-tight">${trimmed.slice(3)}</h2>`;
+        if (trimmed.startsWith('### ')) return `<h3 class="text-[1.5rem] font-bold text-slate-900 mt-12 mb-6 leading-tight">${trimmed.slice(4)}</h3>`;
+        
+        return `<p class="mb-8">${trimmed}</p>`;
+      })
+      .join('\n');
 
-      // 1. Handle Images: ![alt](url)
-      // Enhanced regex to handle complex URLs from Google and other sources
-      const imageMatch = trimmedBlock.match(/!\[(.*?)\]\((.*?)\)/);
-      if (imageMatch) {
-        const alt = imageMatch[1];
-        const src = imageMatch[2];
-        return (
-          <figure key={index} className="my-12 flex flex-col items-center w-full mx-auto">
-            <div className="w-full max-w-[800px] rounded-[12px] overflow-hidden shadow-md">
-              <img 
-                src={src} 
-                alt={alt} 
-                className="w-full h-auto object-cover block" 
-                onError={(e) => (e.currentTarget.style.display = 'none')}
-              />
-            </div>
-            {alt && (
-              <figcaption className="mt-4 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400 text-center max-w-[600px]">
-                {alt}
-              </figcaption>
-            )}
-          </figure>
-        );
-      }
-
-      // 2. Handle Headings: ## Heading
-      if (trimmedBlock.startsWith('## ')) {
-        return (
-          <h2 key={index} className="text-[1.8rem] font-bold text-slate-900 mt-16 mb-8 leading-tight">
-            {processInline(trimmedBlock.replace('## ', ''))}
-          </h2>
-        );
-      }
-
-      // 3. Handle Blockquotes: > Quote
-      if (trimmedBlock.startsWith('> ')) {
-        return (
-          <blockquote key={index} className="my-16 bg-blue-50/40 rounded-[2rem] p-10 md:p-14 text-center relative overflow-hidden">
-            <QuoteIcon className="absolute top-6 left-6 size-12 text-[#0d93f2]/10" />
-            <p className="text-2xl md:text-3xl font-serif italic text-slate-900 leading-snug">
-              {processInline(trimmedBlock.replace('> ', ''))}
-            </p>
-          </blockquote>
-        );
-      }
-
-      // 4. Default Paragraph
-      return (
-        <p key={index} className="text-lg md:text-xl leading-[1.7] text-slate-600 mb-8 whitespace-pre-wrap">
-          {processInline(trimmedBlock)}
-        </p>
-      );
-    });
-  };
-
-  const processInline = (text: string) => {
-    const parts = text.split(/(\*\*.*?\*\*)/g);
-    return parts.map((part, i) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
-        return <strong key={i} className="font-bold text-slate-900">{part.slice(2, -2)}</strong>;
-      }
-      return part;
-    });
+    return formatted;
   };
 
   return (
@@ -105,9 +72,15 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, articles, onBack
         </div>
         <div className="relative z-10 w-full max-w-4xl px-6">
           <div className="animate-in fade-in zoom-in-95 duration-[1200ms]">
-            <h1 className="text-white text-5xl md:text-[3.5rem] font-serif font-bold italic leading-tight drop-shadow-xl">
+            <h1 className="text-white text-5xl md:text-[3.5rem] font-serif font-bold italic leading-tight drop-shadow-xl mb-6">
               {article.title}
             </h1>
+            {article.location && (
+              <div className="flex items-center justify-center gap-2 text-white/90 font-bold uppercase tracking-[0.2em] text-xs md:text-sm">
+                <MapPin className="size-4 text-[#0d93f2]" />
+                {article.location}
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -133,17 +106,11 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, articles, onBack
         {/* Narrative Column */}
         <div className="flex-1 w-full max-w-[800px] mx-auto lg:mx-0">
           <article>
-            {/* Intro Paragraph: Italic with Azure Drop Cap */}
-            {article.description && (
-              <p className="text-3xl leading-relaxed text-slate-900 font-serif italic mb-16 border-b border-slate-100 pb-16 first-letter:text-[4.5rem] first-letter:font-black first-letter:text-[#0d93f2] first-letter:float-left first-letter:mr-4 first-letter:mt-1 first-letter:leading-[0.8] first-letter:font-serif first-letter:not-italic">
-                {article.description}
-              </p>
-            )}
-
-            {/* Markdown Body Content */}
-            <div className="article-body">
-              {renderMarkdown(article.content || "")}
-            </div>
+            {/* HTML Body Content (with drop cap included) */}
+            <div 
+              className="article-content prose prose-lg max-w-none text-slate-600 leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(formatContent(removeFirstH1(article.content || ""))) }} 
+            />
           </article>
 
           {/* Related Stories */}

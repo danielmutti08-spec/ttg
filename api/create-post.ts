@@ -59,7 +59,8 @@ export default async function handler(req: any, res: any) {
       content, 
       coverImage, 
       heroImage, 
-      slug: customSlug 
+      slug: customSlug,
+      description
     } = req.body;
 
     // 3. Validazione campi obbligatori
@@ -97,6 +98,7 @@ export default async function handler(req: any, res: any) {
       slug: finalSlug,
       title,
       location: location || 'DISCOVERED, WORLD',
+      description: description || (content ? content.substring(0, 155) : ''),
       content,
       category: 'Europe', // Default
       imageUrl: coverImage || '',

@@ -52,6 +52,64 @@
         -ms-overflow-style: none;
         scrollbar-width: none;
       }
+      /* ========================================
+         DROP CAP + CORSIVO - FONT MIXATO
+         ======================================== */
+
+      /* Contenuto articolo - Font normale sito */
+      .article-content {
+        font-family: inherit; /* Plus Jakarta Sans */
+        line-height: 1.8;
+        color: #1f2937;
+      }
+
+      /* Primo paragrafo (intro) - Font serif elegante + corsivo */
+      .article-content > p:first-of-type {
+        font-style: italic;
+        font-size: 1.2rem;
+        color: #4b5563;
+        margin-bottom: 2rem;
+        line-height: 1.8;
+        font-family: 'Georgia', 'Palatino', 'Times New Roman', serif; /* ← SERIF SOLO QUI */
+      }
+
+      /* Drop cap - Font serif elegante */
+      .article-content > p:first-of-type::first-letter {
+        float: left;
+        font-size: 4rem;
+        line-height: 0.9;
+        font-weight: 700;
+        color: #3b82f6; /* Azzurro */
+        margin-right: 0.5rem;
+        margin-top: 0.2rem;
+        font-style: normal;
+        font-family: 'Georgia', 'Palatino', serif; /* ← SERIF PER DROP CAP */
+      }
+
+      /* Paragrafi normali - Font normale sito */
+      .article-content > p {
+        margin-bottom: 1.5rem;
+        font-size: 1.05rem;
+        line-height: 1.8;
+        font-family: inherit; /* Plus Jakarta Sans */
+      }
+
+      /* Titoli sezioni */
+      .article-content > h2 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        margin-top: 3rem;
+        margin-bottom: 1rem;
+        color: #111827;
+      }
+
+      .article-content > h3 {
+        font-size: 1.4rem;
+        font-weight: 600;
+        margin-top: 2rem;
+        margin-bottom: 0.75rem;
+        color: #374151;
+      }
     </style>
   <script type="importmap">
 {
