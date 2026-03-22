@@ -1,5 +1,7 @@
 
 import { Article, SiteConfig } from './types';
+import { doc, updateDoc, increment, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
+import { db } from './firebase';
 
 const DB_NAME = 'TravelGuruDB';
 const DB_VERSION = 1;
@@ -113,3 +115,103 @@ export const dbService = {
     }
   }
 };
+
+// ========================================
+// FUNZIONI LIKE/SHARE/SAVE
+// ========================================
+
+// Genera ID utente unico
+export function getUserId(): string {
+  let userId = sessionStorage.getItem('userId');
+  if (!userId) {
+    userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    sessionStorage.setItem('userId', userId);
+  }
+  return userId;
+}
+
+// Like articolo
+export async function likeArticle(articleId: string, userId: string): Promise<boolean> {
+  if (!db) return false;
+  try {
+    const articleRef = doc(db, 'articles', articleId);
+    const articleDoc = await getDoc(articleRef);
+    
+    if (!articleDoc.exists()) return false;
+    
+    const data = articleDoc.data();
+    const stats = data.stats || { likes: 0, shares: 0, saves: 0 };
+    const likedBy = data.likedBy || [];
+    
+    if (likedBy.includes(userId)) {
+      // Unlike
+      await updateDoc(articleRef, {
+        'stats.likes': Math.max(0, stats.likes - 1),
+        likedBy: arrayRemove(userId)
+      });
+      return false;
+    } else {
+      // Like
+      await updateDoc(articleRef, {
+        'stats.likes': stats.likes + 1,
+        likedBy: arrayUnion(userId)
+      });
+      return true;
+    }
+  } catch (error) {
+    console.error('Like error:', error);
+    return false;
+  }
+}
+
+// Share articolo
+export async function shareArticle(articleId: string): Promise<void> {
+  if (!db) return;
+  try {
+    const articleRef = doc(db, 'articles', articleId);
+    const articleDoc = await getDoc(articleRef);
+    
+    if (articleDoc.exists()) {
+      const stats = articleDoc.data().stats || { likes: 0, shares: 0, saves: 0 };
+      await updateDoc(articleRef, {
+        'stats.shares': stats.shares + 1
+      });
+    }
+  } catch (error) {
+    console.error('Share error:', error);
+  }
+}
+
+// Save articolo
+export async function saveArticle(articleId: string, userId: string): Promise<boolean> {
+  if (!db) return false;
+  try {
+    const articleRef = doc(db, 'articles', articleId);
+    const articleDoc = await getDoc(articleRef);
+    
+    if (!articleDoc.exists()) return false;
+    
+    const data = articleDoc.data();
+    const stats = data.stats || { likes: 0, shares: 0, saves: 0 };
+    const savedBy = data.savedBy || [];
+    
+    if (savedBy.includes(userId)) {
+      // Unsave
+      await updateDoc(articleRef, {
+        'stats.saves': Math.max(0, stats.saves - 1),
+        savedBy: arrayRemove(userId)
+      });
+      return false;
+    } else {
+      // Save
+      await updateDoc(articleRef, {
+        'stats.saves': stats.saves + 1,
+        savedBy: arrayUnion(userId)
+      });
+      return true;
+    }
+  } catch (error) {
+    console.error('Save error:', error);
+    return false;
+  }
+}

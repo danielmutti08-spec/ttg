@@ -32,6 +32,13 @@ export interface Article {
   published?: boolean;
   createdAt?: any;
   updatedAt?: any;
+  stats?: {
+    likes: number;
+    shares: number;
+    saves: number;
+  };
+  likedBy?: string[];
+  savedBy?: string[];
 }
 
 export interface SiteConfig {

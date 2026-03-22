@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Share2, Heart, Bookmark, Calendar, CreditCard, Coffee, Sparkles, MapPin } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { Article } from '../types.ts';
 import ArticleCard from './ArticleCard.tsx';
+import { likeArticle, shareArticle, saveArticle, getUserId } from '../db';
 
 // Function to remove the first H1 from content (duplicate title)
 function removeFirstH1(content: string): string {
@@ -23,9 +24,69 @@ interface ArticleDetailProps {
 }
 
 const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, articles, onBack, onSelectArticle }) => {
+  const [liked, setLiked] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [stats, setStats] = useState({ likes: 0, shares: 0, saves: 0 });
+  const userId = getUserId();
+
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [article.id]);
+
+  useEffect(() => {
+    if (article) {
+      const articleStats = article.stats || { likes: 0, shares: 0, saves: 0 };
+      setStats(articleStats);
+      setLiked(article.likedBy?.includes(userId) || false);
+      setSaved(article.savedBy?.includes(userId) || false);
+    }
+  }, [article, userId]);
+
+  // Handler Like
+  const handleLike = async () => {
+    if (!article) return;
+    const isLiked = await likeArticle(article.id, userId);
+    setLiked(isLiked);
+    setStats(prev => ({
+      ...prev,
+      likes: isLiked ? prev.likes + 1 : prev.likes - 1
+    }));
+  };
+
+  // Handler Share
+  const handleShare = async () => {
+    if (!article) return;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: article.title,
+          url: window.location.href
+        });
+        await shareArticle(article.id);
+        setStats(prev => ({ ...prev, shares: prev.shares + 1 }));
+      } catch (err) {
+        // Condivisione annullata
+      }
+    } else {
+      // Fallback: copia link
+      navigator.clipboard.writeText(window.location.href);
+      alert('Link copied!');
+      await shareArticle(article.id);
+      setStats(prev => ({ ...prev, shares: prev.shares + 1 }));
+    }
+  };
+
+  // Handler Save
+  const handleSave = async () => {
+    if (!article) return;
+    const isSaved = await saveArticle(article.id, userId);
+    setSaved(isSaved);
+    setStats(prev => ({
+      ...prev,
+      saves: isSaved ? prev.saves + 1 : prev.saves - 1
+    }));
+  };
 
   const relatedArticles = articles
     .filter(a => a.id !== article.id)
@@ -89,17 +150,31 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, articles, onBack
         
         {/* Interaction Sidebar */}
         <aside className="hidden lg:flex flex-col gap-10 w-12 sticky top-32 h-fit">
-          <button className="group flex flex-col items-center gap-3">
-            <Heart className="w-6 h-6 text-slate-300 group-hover:text-[#0d93f2] transition-colors" />
-            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">1.2k</p>
+          {/* Like Button */}
+          <button
+            onClick={handleLike}
+            className={`group flex flex-col items-center gap-3 transition-colors ${liked ? 'text-red-500' : 'text-slate-400'}`}
+          >
+            <Heart className={`w-6 h-6 transition-colors ${liked ? 'fill-current' : 'text-slate-300 group-hover:text-[#0d93f2]'}`} />
+            <p className="text-[9px] font-bold uppercase tracking-widest">{stats.likes}</p>
           </button>
-          <button className="group flex flex-col items-center gap-3">
+
+          {/* Share Button */}
+          <button
+            onClick={handleShare}
+            className="group flex flex-col items-center gap-3 text-slate-400 hover:text-[#0d93f2] transition-colors"
+          >
             <Share2 className="w-6 h-6 text-slate-300 group-hover:text-[#0d93f2] transition-colors" />
-            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Share</p>
+            <p className="text-[9px] font-bold uppercase tracking-widest">{stats.shares}</p>
           </button>
-          <button className="group flex flex-col items-center gap-3">
-            <Bookmark className="w-6 h-6 text-slate-300 group-hover:text-[#0d93f2] transition-colors" />
-            <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Save</p>
+
+          {/* Save Button */}
+          <button
+            onClick={handleSave}
+            className={`group flex flex-col items-center gap-3 transition-colors ${saved ? 'text-[#0d93f2]' : 'text-slate-400'}`}
+          >
+            <Bookmark className={`w-6 h-6 transition-colors ${saved ? 'fill-current' : 'text-slate-300 group-hover:text-[#0d93f2]'}`} />
+            <p className="text-[9px] font-bold uppercase tracking-widest">{stats.saves}</p>
           </button>
         </aside>
 

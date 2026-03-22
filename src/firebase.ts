@@ -37,7 +37,7 @@ const apiKey = getEnv('VITE_FIREBASE_API_KEY');
 const projectId = getEnv('VITE_FIREBASE_PROJECT_ID');
 const appId = getEnv('VITE_FIREBASE_APP_ID');
 
-let db: Firestore | null = null;
+export let db: Firestore | null = null;
 let isConfigured = false;
 
 // Initialize Firebase only if we have the necessary configuration
